@@ -25,6 +25,7 @@ import com.intellij.openapi.projectRoots.impl.JavaSdkImpl;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.newvfs.impl.VfsRootAccess;
+import kotlin.jvm.functions.Function0;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.TestOnly;
 import org.jetbrains.kotlin.test.KotlinTestUtils;
@@ -52,6 +53,11 @@ public class PluginTestCaseBase {
 
     @NotNull
     private static Sdk getSdk(String sdkHome, String name) {
+        ProjectJdkTable table = ProjectJdkTable.getInstance();
+        Sdk existing = table.findJdk(name);
+        if (existing != null) {
+            return existing;
+        }
         return JavaSdk.getInstance().createJdk(name, sdkHome, true);
     }
 
@@ -85,17 +91,25 @@ public class PluginTestCaseBase {
     }
 
     @NotNull
+    public static Sdk jdk(@NotNull Disposable disposable, @NotNull Function0<Sdk> getJdk) {
+        Sdk jdk = getJdk.invoke();
+        ApplicationManager.getApplication().runWriteAction(() -> ProjectJdkTable.getInstance().addJdk(jdk, disposable));
+        return jdk;
+    }
+
+    @NotNull
     public static Sdk jdk(@NotNull TestJdkKind kind) {
+        Sdk jdk;
         switch (kind) {
             case MOCK_JDK:
-                return mockJdk();
+                jdk = mockJdk();
             case FULL_JDK_9:
                 File jre9 = KotlinTestUtils.getJdk9HomeIfPossible();
                 assert jre9 != null : "JDK_19 environment variable is not set";
                 VfsRootAccess.allowRootAccess(jre9.getPath());
-                return getSdk(jre9.getPath(), "Full JDK 9");
+                jdk = getSdk(jre9.getPath(), "Full JDK 9");
             case FULL_JDK:
-                return fullJdk();
+                jdk = fullJdk();
             default:
                 throw new UnsupportedOperationException(kind.toString());
         }
